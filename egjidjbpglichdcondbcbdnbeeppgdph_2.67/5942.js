@@ -1,0 +1,62 @@
+try {
+  let i = "u" > typeof window ? window : "u" > typeof global ? global : "u" > typeof globalThis ? globalThis : "u" > typeof self ? self : {},
+    l = (new i.Error).stack;
+  l && (i.i = i.i || {}, i.i[l] = "4396cee0-2b74-46c5-bb65-e11463cb226e", i.l = "sentry-dbid-4396cee0-2b74-46c5-bb65-e11463cb226e")
+} catch {}("u" > typeof window ? window : "u" > typeof global ? global : "u" > typeof globalThis ? globalThis : "u" > typeof self ? self : {}).SENTRY_RELEASE = {
+  id: "2.67.0"
+}, (self.webpackChunkbrowser_extension_wallet = self.webpackChunkbrowser_extension_wallet || []).push([
+  [5942], {
+    75942: (i, l, a) => {
+      a.r(l), a.d(l, {
+        ReactComponent: () => o,
+        default: () => s
+      });
+      var e, I, t = a(96540);
+
+      function g() {
+        return g = Object.assign ? Object.assign.bind() : function(i) {
+          for (var l = 1; arguments.length > l; l++) {
+            var a = arguments[l];
+            for (var e in a)({}).hasOwnProperty.call(a, e) && (i[e] = a[e])
+          }
+          return i
+        }, g.apply(null, arguments)
+      }
+      var o = function(i) {
+        return t.createElement("svg", g({
+          xmlns: "http://www.w3.org/2000/svg",
+          width: 96,
+          height: 96,
+          fill: "none"
+        }, i), t.createElement("mask", {
+          id: "bulgaria_svg__a",
+          width: 96,
+          height: 96,
+          x: 0,
+          y: 0,
+          maskUnits: "userSpaceOnUse",
+          style: {
+            maskType: "alpha"
+          }
+        }, e || (e = t.createElement("circle", {
+          cx: 48,
+          cy: 48,
+          r: 48,
+          fill: "#D9D9D9"
+        }))), I || (I = t.createElement("g", {
+          mask: "url(#bulgaria_svg__a)"
+        }, t.createElement("path", {
+          fill: "#F0F0F0",
+          d: "M121.99 0H-22v96h143.99z"
+        }), t.createElement("path", {
+          fill: "#496E2D",
+          d: "M121.99 32H-22v64h143.99z"
+        }), t.createElement("path", {
+          fill: "#D80027",
+          d: "M121.99 64H-22v32h143.99z"
+        }))))
+      };
+      const s = "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iOTYiIGhlaWdodD0iOTYiIHZpZXdCb3g9IjAgMCA5NiA5NiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPG1hc2sgaWQ9Im1hc2swXzJfNjE5OTQiIHN0eWxlPSJtYXNrLXR5cGU6YWxwaGEiIG1hc2tVbml0cz0idXNlclNwYWNlT25Vc2UiIHg9IjAiIHk9IjAiIHdpZHRoPSI5NiIgaGVpZ2h0PSI5NiI+CjxjaXJjbGUgY3g9IjQ4IiBjeT0iNDgiIHI9IjQ4IiBmaWxsPSIjRDlEOUQ5Ii8+CjwvbWFzaz4KPGcgbWFzaz0idXJsKCNtYXNrMF8yXzYxOTk0KSI+CjxwYXRoIGQ9Ik0xMjEuOTkgMEgtMjJWOTZIMTIxLjk5VjBaIiBmaWxsPSIjRjBGMEYwIi8+CjxwYXRoIGQ9Ik0xMjEuOTkgMzJILTIyVjk2SDEyMS45OVYzMloiIGZpbGw9IiM0OTZFMkQiLz4KPHBhdGggZD0iTTEyMS45OSA2NEgtMjJWOTZIMTIxLjk5VjY0WiIgZmlsbD0iI0Q4MDAyNyIvPgo8L2c+Cjwvc3ZnPgo="
+    }
+  }
+]);
