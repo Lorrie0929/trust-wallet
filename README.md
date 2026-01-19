@@ -35,31 +35,9 @@ On December 25, 2025, Trust Wallet experienced a security breach in its browser 
 **受影响版本**：Trust Wallet Browser Extension **2.68**  
 **安全版本**：2.67（作为对比基准）
 
-## 🚀 快速开始
-
-### 环境要求
-
-- Node.js >= 14
-- Python 3.x
-- npm 或 yarn
-
-### 安装依赖
-
-```bash
-# 安装 Node.js 依赖
-npm install
-
-# 初始化 Git Submodule（bp_decoder）
-git submodule update --init --recursive
-```
-
-**注意**：`tools/bp_decoder` 是一个独立的 git 仓库，作为 submodule 引入。首次克隆项目后需要初始化 submodule。详见 [SETUP_SUBMODULE.md](SETUP_SUBMODULE.md)。
-
 ## Analysis
 
-None.
-
-The Skeleton section only shows example and more information can be viewed in References.
+TBA
 
 ## References
 - [Root cause](https://x.com/0xakinator/status/2004297673067704651)
