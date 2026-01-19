@@ -91,8 +91,8 @@ function parseArgs() {
   
   // 默认值
   return {
-    dir1: path.join(__dirname, 'egjidjbpglichdcondbcbdnbeeppgdph_2.67'),
-    dir2: path.join(__dirname, 'egjidjbpglichdcondbcbdnbeeppgdph_2.68'),
+    dir1: path.join(__dirname, '..', 'data', 'extensions', 'egjidjbpglichdcondbcbdnbeeppgdph_2.67'),
+    dir2: path.join(__dirname, '..', 'data', 'extensions', 'egjidjbpglichdcondbcbdnbeeppgdph_2.68'),
   };
 }
 
@@ -101,9 +101,9 @@ const { dir1, dir2 } = parseArgs();
 const dir1Name = path.basename(dir1);
 const dir2Name = path.basename(dir2);
 
-const dir1Formatter = path.join(__dirname, `${dir1Name}_formatter`);
-const dir2Formatter = path.join(__dirname, `${dir2Name}_formatter`);
-const outDir = path.join(__dirname, `${dir2Name}_${dir1Name}_diff`);
+const dir1Formatter = path.join(__dirname, '..', 'data', 'formatter', `${dir1Name}_formatter`);
+const dir2Formatter = path.join(__dirname, '..', 'data', 'formatter', `${dir2Name}_formatter`);
+const outDir = path.join(__dirname, '..', 'data', 'diff', `${dir2Name}_${dir1Name}_diff`);
 
 // js-beautify 配置
 const beautifyOptions = {

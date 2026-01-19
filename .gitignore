@@ -1,8 +1,26 @@
-node_modules
+# Dependencies
+node_modules/
 package-lock.json
-*_formatter
-*_diff
-*.sh
 
-*.yaml
+# Output directories
+data/formatter/
+data/diff/
+
+# OS files
 .DS_Store
+*.swp
+*.swo
+*~
+
+# Temporary files
+*.log
+*.tmp
+
+# IDE
+.vscode/
+.idea/
+*.code-workspace
+
+# Environment files
+.env
+.env.local

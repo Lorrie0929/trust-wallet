@@ -1,0 +1,3 @@
+[submodule "tools/bp_decoder"]
+	path = tools/bp_decoder
+	url = ssh://git@git.blocksec.cn:8832/blocksecteam/audit/indicent_analysis/incident_tools/bp_decoder.git

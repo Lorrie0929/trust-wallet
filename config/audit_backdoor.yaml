@@ -1,0 +1,382 @@
+rules:
+  - id: suspicious-string-hex-encoding
+    languages: [javascript]
+    severity: ERROR
+    message: "发现高频十六进制/Base64编码，常用于隐藏恶意域名。"
+    pattern-regex: '(\\x[0-9a-fA-F]{2}){4,}' # 匹配连续的十六进制转义符
+
+  - id: background-script-communication-leak
+    languages: [javascript]
+    severity: WARNING
+    message: "监控 Content Script 向 Background 注入的异常消息，寻找数据劫持点。"
+    pattern: |
+      chrome.runtime.sendMessage({ ..., type: $TYPE, ... }, ($RESP) => {
+        ...
+      })
+    # 重点关注不带硬编码 type 的消息发送，可能是动态生成的劫持逻辑
+
+  - id: global-prototype-pollution-hook
+    languages: [javascript]
+    severity: ERROR
+    message: "检测到对全局对象的污染，可能用于拦截解密库（如 ethers.js/crypto-js）。"
+    pattern-either:
+      - pattern: Object.defineProperty(Object.prototype, ...)
+      - pattern: Array.prototype.$FUNC = ...
+
+  - id: network-sink-without-origin
+    languages: [javascript]
+    severity: ERROR
+    message: "定位所有向非静态硬编码域名发送数据的行为。"
+    patterns:
+      - pattern-either:
+          - pattern: $XHR.open("POST", $URL, ...)
+          - pattern: $XHR.send($DATA)
+      - metavariable-regex:
+          metavariable: '$URL'
+          regex: '^[^"''].*' # 匹配变量 URL，而非硬编码的字符串字面量
+  # 1. 敏感数据泄露检测
+  - id: wallet-exfiltrate-mnemonic-network
+    mode: taint
+    languages: [javascript, typescript]
+    message: "高危：助记词/私钥流向外部请求或分析接口。"
+    severity: HIGH
+    metadata:
+      cwe: "CWE-359"
+      refs:
+        - https://semgrep.dev
+        - https://cwe.mitre.org/data/definitions/359.html
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - pattern: $VAULT.getMnemonic(...)
+              - pattern: $VAULT.revealSeedPhrase(...)
+              - pattern: $VAULT.exportAccount(...)
+              - pattern: $VAULT.serialize(...)
+              - pattern: $KEYRING.exportKey(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: fetch($URL, ...)
+              - pattern: $XHR.send(...)
+              - pattern: $ANALYTICS.capture(...)
+              - pattern: $ANALYTICS.track(...)
+              - pattern: navigator.clipboard.writeText(...)
+
+  - id: wallet-clipboard-snoop
+    languages: [javascript, typescript]
+    message: "中危：检测到读取剪贴板，可能用于窃取助记词/私钥。"
+    severity: MEDIUM
+    metadata:
+      cwe: "CWE-359"
+      refs:
+        - https://developer.mozilla.org/en-US/docs/Web/API/Clipboard/readText
+    patterns:
+      - pattern-either:
+          - pattern: navigator.clipboard.readText(...)
+          - pattern: navigator.clipboard.read(...)
+          - pattern: document.execCommand("paste", ...)
+
+  - id: wallet-privatekey-export-subtle
+    languages: [javascript, typescript]
+    message: "高危：通过 SubtleCrypto 导出私钥/种子，疑似泄露。"
+    severity: HIGH
+    metadata:
+      cwe: "CWE-359"
+      refs:
+        - https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto/exportKey
+    patterns:
+      - pattern-either:
+          - pattern: crypto.subtle.exportKey("pkcs8", $KEY)
+          - pattern: crypto.subtle.exportKey("raw", $KEY)
+          - pattern: window.crypto.subtle.exportKey("pkcs8", $KEY)
+          - pattern: window.crypto.subtle.exportKey("raw", $KEY)
+
+  - id: wallet-privatekey-storage-set
+    languages: [javascript, typescript]
+    message: "高危：将私钥/助记词写入本地存储，可能导致泄露。"
+    severity: HIGH
+    metadata:
+      cwe: "CWE-922"
+      refs:
+        - https://cwe.mitre.org/data/definitions/922.html
+    patterns:
+      - pattern-either:
+          - pattern: localStorage.setItem("$NAME", $VAL)
+          - pattern: sessionStorage.setItem("$NAME", $VAL)
+          - pattern: |
+              chrome.storage.local.set({$NAME: $VAL}, ...)
+      - metavariable-regex:
+          metavariable: "$NAME"
+          regex: "(?i)(priv|pk|private|secret|seed|mnemonic|wallet)"
+
+  - id: wallet-privatekey-console-log
+    languages: [javascript, typescript]
+    message: "中危：私钥/助记词被打印到日志。"
+    severity: MEDIUM
+    metadata:
+      cwe: "CWE-532"
+      refs:
+        - https://cwe.mitre.org/data/definitions/532.html
+    patterns:
+      - pattern-either:
+          - pattern: console.log($SECRET)
+          - pattern: console.info($SECRET)
+          - pattern: console.debug($SECRET)
+          - pattern: console.warn($SECRET)
+          - pattern: console.error($SECRET)
+      - metavariable-regex:
+          metavariable: "$SECRET"
+          regex: "(?i)(mnemonic|seed|private|privKey|pk|secret|wallet)"
+
+  - id: wallet-privatekey-postmessage
+    languages: [javascript, typescript]
+    message: "高危：通过 postMessage 传递私钥/助记词，可能被页面或 iframe 窃取。"
+    severity: HIGH
+    metadata:
+      cwe: "CWE-359"
+      refs:
+        - https://developer.mozilla.org/en-US/docs/Web/API/Window/postMessage
+    patterns:
+      - pattern-either:
+          - pattern: |
+              window.postMessage({ ..., privateKey: $KEY, ... }, $ORIGIN)
+          - pattern: |
+              window.postMessage({ ..., seed: $KEY, ... }, $ORIGIN)
+          - pattern: |
+              window.postMessage({ ..., mnemonic: $KEY, ... }, $ORIGIN)
+
+  - id: wallet-obfuscated-exfil-base64
+    languages: [javascript, typescript]
+    message: "高危：疑似先 Base64/Buffer 编码后再发送网络请求，可能掩蔽敏感数据外传。"
+    severity: HIGH
+    metadata:
+      cwe: "CWE-359"
+      refs:
+        - https://developer.mozilla.org/en-US/docs/Glossary/Base64
+    patterns:
+      - pattern-either:
+          - pattern: |
+              fetch($URL, { ..., body: btoa($DATA), ... })
+          - pattern: |
+              fetch($URL, { ..., body: Buffer.from($DATA).toString("base64"), ... })
+          - pattern: $XHR.send(btoa($DATA))
+          - pattern: $XHR.send(Buffer.from($DATA).toString("base64"))
+
+  - id: wallet-obfuscated-exfil-hex
+    languages: [javascript, typescript]
+    message: "高危：疑似先十六进制编码后再发送网络请求，可能掩蔽敏感数据外传。"
+    severity: HIGH
+    metadata:
+      cwe: "CWE-359"
+      refs:
+        - https://en.wikipedia.org/wiki/Hex_dump
+    patterns:
+      - pattern-either:
+          - pattern: |
+              fetch($URL, { ..., body: Buffer.from($DATA).toString("hex"), ... })
+          - pattern: $XHR.send(Buffer.from($DATA).toString("hex"))
+
+  - id: wallet-unexpected-storage-read
+    languages: [javascript, typescript]
+    message: "中危：在非钱包核心模块读取 localStorage/sessionStorage，需确认是否泄露敏感数据。"
+    severity: MEDIUM
+    metadata:
+      cwe: "CWE-200"
+      refs:
+        - https://cwe.mitre.org/data/definitions/200.html
+    patterns:
+      - pattern-either:
+          - pattern: localStorage.getItem($KEY)
+          - pattern: sessionStorage.getItem($KEY)
+          - pattern: chrome.storage.local.get($KEY, ...)
+
+  # 2. 交易篡改检测
+  - id: wallet-tx-to-rewrite
+    languages: [javascript, typescript]
+    message: "高危：交易目标地址被替换或重写。"
+    severity: HIGH
+    metadata:
+      cwe: "CWE-472"
+      refs:
+        - https://cwe.mitre.org/data/definitions/472.html
+    patterns:
+      - pattern-either:
+          - pattern: |
+              $TX.to = $MALICIOUS;
+          - pattern: |
+              $TX.request.to = $MALICIOUS;
+          - pattern: |
+              $REQUEST.to = $MALICIOUS;
+
+  - id: wallet-tx-value-manipulation
+    languages: [javascript, typescript]
+    message: "高危：交易金额或 value 被非常规修改。"
+    severity: HIGH
+    metadata:
+      cwe: "CWE-471"
+      refs:
+        - https://cwe.mitre.org/data/definitions/471.html
+    patterns:
+      - pattern-either:
+          - pattern: |
+              $TX.value = $MALICIOUS;
+          - pattern: |
+              $TX.request.value = $MALICIOUS;
+          - pattern: |
+              $REQUEST.value = $MALICIOUS;
+
+  - id: wallet-gas-overwrite
+    languages: [javascript, typescript]
+    message: "中危：Gas/GasPrice 被重写，可能用于费用操纵。"
+    severity: MEDIUM
+    metadata:
+      cwe: "CWE-16"
+      refs:
+        - https://ethereum.org/en/developers/docs/gas/
+    patterns:
+      - pattern-either:
+          - pattern: $TX.gas = $MALICIOUS;
+          - pattern: $TX.gasPrice = $MALICIOUS;
+          - pattern: $TX.maxFeePerGas = $MALICIOUS;
+          - pattern: $TX.maxPriorityFeePerGas = $MALICIOUS;
+
+  # 3. 通信异常检测
+  - id: wallet-suspicious-fetch-domain
+    languages: [javascript, typescript]
+    message: "中危：向非常规域名发送数据，请核实是否为官方端点。"
+    severity: MEDIUM
+    metadata:
+      cwe: "CWE-501"
+      refs:
+        - https://cwe.mitre.org/data/definitions/501.html
+    patterns:
+      - pattern-either:
+          - pattern: fetch("$URL", ...)
+          - pattern: new XMLHttpRequest().open(..., "$URL", ...)
+      - metavariable-regex:
+          metavariable: "$URL"
+          regex: ".*(metrics|analytics|api|cloud|tracking|cdn|storage|ipfs|pinata|worker|lambda|edge).*"
+
+  - id: wallet-suspicious-websocket
+    languages: [javascript, typescript]
+    message: "中危：检测到异常 WebSocket/Socket.IO 连接，需确认目标。"
+    severity: MEDIUM
+    metadata:
+      cwe: "CWE-502"
+      refs:
+        - https://cwe.mitre.org/data/definitions/502.html
+    patterns:
+      - pattern-either:
+          - pattern: new WebSocket("$URL", ...)
+          - pattern: io.connect("$URL", ...)
+          - pattern: io("$URL", ...)
+      - metavariable-regex:
+          metavariable: "$URL"
+          regex: ".*(metrics|analytics|cloud|cdn|edge|proxy|tunnel|ws|wss).*"
+
+  - id: wallet-hardcoded-crypto-key
+    languages: [javascript, typescript]
+    message: "中危：发现硬编码的加密密钥/IV，可能用于隐蔽通信。"
+    severity: MEDIUM
+    metadata:
+      cwe: "CWE-321"
+      refs:
+        - https://cwe.mitre.org/data/definitions/321.html
+    patterns:
+      - pattern-either:
+          - pattern: |
+              const $KEY = "$SECRET";
+          - pattern: |
+              var $KEY = "$SECRET";
+      - metavariable-regex:
+          metavariable: "$SECRET"
+          regex: "(?i).{16,}"
+
+  # 4. 供应链攻击特征
+  - id: wallet-supplychain-new-small-dep
+    languages: [yaml, json]
+    message: "低危：新增/小众依赖，需确认来源可信。"
+    severity: LOW
+    metadata:
+      cwe: "CWE-829"
+      refs:
+        - https://cwe.mitre.org/data/definitions/829.html
+    pattern-either:
+      - pattern: '"@*$VENDOR/$PKG": "$VERSION"'
+      - pattern: '"$PKG": "$VERSION"'
+    metavariable-regex:
+      metavariable: "$PKG"
+      regex: "(?i)(clipboard|analytics|tracker|inject|hook|agent|monitor|collector|posthog|mixpanel|sentry|zipkin|protobuf|wasm|bridge|proxy|tunnel|socket|crypto|aes|rsa|elliptic).*"
+
+  - id: wallet-dynamic-code-execution
+    languages: [javascript, typescript]
+    message: "高危：使用 eval/new Function/Function 构造器，疑似注入点。"
+    severity: HIGH
+    metadata:
+      cwe: "CWE-95"
+      refs:
+        - https://cwe.mitre.org/data/definitions/95.html
+    patterns:
+      - pattern-either:
+          - pattern: eval(...)
+          - pattern: new Function(...)
+          - pattern: Function("return " + $CODE)(...)
+
+  - id: wallet-build-script-anomaly
+    languages: [javascript, typescript, sh]
+    message: "中危：构建流程中执行可疑脚本或外部下载。"
+    severity: MEDIUM
+    metadata:
+      cwe: "CWE-829"
+      refs:
+        - https://cwe.mitre.org/data/definitions/829.html
+    patterns:
+      - pattern-either:
+          - pattern: curl $URL | sh
+          - pattern: wget $URL -O - | sh
+          - pattern: node -e $CODE
+
+  # 5. 持久化机制检测
+  - id: wallet-background-script-registration
+    languages: [javascript, typescript]
+    message: "中危：检测到动态注册后台脚本，需确认合法性。"
+    severity: MEDIUM
+    metadata:
+      cwe: "CWE-284"
+      refs:
+        - https://developer.chrome.com/docs/extensions/reference/runtime/#method-getBackgroundPage
+    patterns:
+      - pattern-either:
+          - pattern: chrome.runtime.getBackgroundPage(...)
+          - pattern: chrome.scripting.registerContentScripts(...)
+          - pattern: browser.runtime.getBackgroundPage(...)
+
+  - id: wallet-permission-escalation
+    languages: [json]
+    message: "高危：扩展请求高权限或新增权限，需确认是否预期。"
+    severity: HIGH
+    metadata:
+      cwe: "CWE-269"
+      refs:
+        - https://developer.chrome.com/docs/extensions/mv3/declare_permissions/
+    patterns:
+      - pattern-either:
+          - pattern: '"permissions": [$PERM, ...]'
+          - pattern: '"host_permissions": [$HOST, ...]'
+      - metavariable-regex:
+          metavariable: "$PERM"
+          regex: "(?i)(clipboardRead|clipboardWrite|tabs|webRequest|webRequestBlocking|debugger|background|scripting|alarms|nativeMessaging|downloads)"
+
+  - id: wallet-update-hijack
+    languages: [json]
+    message: "中危：扩展更新 URL/机制被劫持或指向非官方源。"
+    severity: MEDIUM
+    metadata:
+      cwe: "CWE-829"
+      refs:
+        - https://developer.chrome.com/docs/extensions/mv2/autoupdate
+    patterns:
+      - pattern: '"update_url": "$URL"'
+      - metavariable-regex:
+          metavariable: "$URL"
+          regex: "(?i)(ipfs|github|gist|cdn|raw|storage|s3|r2|bucket|edge|worker|lambda|custom).*"

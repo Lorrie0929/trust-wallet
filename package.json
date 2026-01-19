@@ -1,12 +1,20 @@
 {
-  "name": "trust-wallet",
+  "name": "trust-wallet-audit",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "Trust Wallet Chrome 扩展安全审计工具集",
+  "main": "scripts/process_diff.js",
   "scripts": {
+    "diff": "node scripts/process_diff.js",
+    "diff:custom": "node scripts/process_diff.js --dir1",
+    "decoder": "python3 tools/bp_decoder/burp_decoder.py",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": [],
+  "keywords": [
+    "security",
+    "audit",
+    "trust-wallet",
+    "chrome-extension"
+  ],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
