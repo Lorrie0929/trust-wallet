@@ -164,6 +164,26 @@ function collectJsFiles(root) {
   return files;
 }
 
+// 收集目录下的 manifest.json 文件（相对路径）
+function collectManifestFiles(root) {
+  const files = [];
+  function walk(current, relBase) {
+    const entries = fs.readdirSync(current, { withFileTypes: true });
+    for (const entry of entries) {
+      if (entry.name === 'node_modules' || entry.name.startsWith('.')) continue;
+      const abs = path.join(current, entry.name);
+      const rel = path.join(relBase, entry.name);
+      if (entry.isDirectory()) {
+        walk(abs, rel);
+      } else if (entry.isFile() && entry.name === 'manifest.json') {
+        files.push(rel);
+      }
+    }
+  }
+  walk(root, '');
+  return files;
+}
+
 // ==================== 步骤1: 反混淆和美化文件并输出到formatter目录 ====================
 
 // Terser 反混淆配置 - 标准模式
@@ -260,6 +280,30 @@ async function beautifyFile(srcPath, destPath, onDeobfuscateFailed = null) {
   }
 }
 
+// 美化 JSON 文件（用于 manifest.json）
+function beautifyJsonFile(srcPath, destPath) {
+  try {
+    const content = fs.readFileSync(srcPath, 'utf8');
+    
+    // 跳过空文件
+    if (content.trim().length === 0) {
+      console.log(`跳过空文件: ${srcPath}`);
+      return false;
+    }
+    
+    // 解析并格式化 JSON
+    const json = JSON.parse(content);
+    const beautified = JSON.stringify(json, null, 2) + '\n';
+    
+    ensureDir(path.dirname(destPath));
+    fs.writeFileSync(destPath, beautified, 'utf8');
+    return true;
+  } catch (error) {
+    console.error(`处理 JSON 文件 ${srcPath} 时出错:`, error.message);
+    return false;
+  }
+}
+
 async function beautifyDirectory(srcDir, destDir) {
   console.log(`\n[步骤1] 开始反混淆和美化目录: ${srcDir} -> ${destDir}`);
   
@@ -275,12 +319,14 @@ async function beautifyDirectory(srcDir, destDir) {
   ensureDir(destDir);
   
   const jsFiles = collectJsFiles(srcDir);
-  console.log(`找到 ${jsFiles.length} 个 JavaScript 文件`);
+  const manifestFiles = collectManifestFiles(srcDir);
+  console.log(`找到 ${jsFiles.length} 个 JavaScript 文件，${manifestFiles.length} 个 manifest.json 文件`);
   
   let successCount = 0;
   let failCount = 0;
   let deobfuscateFailedCount = 0;
   
+  // 处理 JavaScript 文件
   for (const rel of jsFiles) {
     const srcPath = path.join(srcDir, rel);
     const destPath = path.join(destDir, rel);
@@ -288,6 +334,20 @@ async function beautifyDirectory(srcDir, destDir) {
     const result = await beautifyFile(srcPath, destPath, (failed) => {
       if (failed) deobfuscateFailedCount++;
     });
+    
+    if (result) {
+      successCount++;
+    } else {
+      failCount++;
+    }
+  }
+  
+  // 处理 manifest.json 文件
+  for (const rel of manifestFiles) {
+    const srcPath = path.join(srcDir, rel);
+    const destPath = path.join(destDir, rel);
+    
+    const result = beautifyJsonFile(srcPath, destPath);
     
     if (result) {
       successCount++;
@@ -329,10 +389,17 @@ async function performDiff() {
   
   ensureDir(outDir);
   
-  const set = new Set([
+  const jsSet = new Set([
     ...collectJsFiles(dir1Formatter),
     ...collectJsFiles(dir2Formatter),
   ]);
+  
+  const manifestSet = new Set([
+    ...collectManifestFiles(dir1Formatter),
+    ...collectManifestFiles(dir2Formatter),
+  ]);
+  
+  const set = new Set([...jsSet, ...manifestSet]);
   
   let sameCount = 0;
   let diffCount = 0;
@@ -395,11 +462,11 @@ async function performDiff() {
   }
   
   console.log(`Diff完成。文件统计: 相同 ${sameCount}, 差异 ${diffCount}, 仅单侧存在 ${missingOnly}, 总计 ${set.size}`);
-  console.log(`Hunk统计: 总hunk数 ${totalHunks}`);
+  console.log(`Hunk统计: 总hunk数 ${totalHunks}, 平均每个差异文件 ${diffCount > 0 ? (totalHunks / diffCount).toFixed(2) : 0} 个hunk`);
   console.log(`Diff 输出目录: ${outDir}`);
   
   // 输出缺失文件列表为 Markdown
-  const lines = ['# Missing JS Files', '', `## Only in ${dir2Name}`, ''];
+  const lines = ['# Missing Files', '', `## Only in ${dir2Name}`, ''];
   if (onlyInDir2.length === 0) {
     lines.push('- 无');
   } else {
