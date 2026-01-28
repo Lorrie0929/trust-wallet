@@ -311,6 +311,19 @@ function hashFile(filePath) {
   });
 }
 
+// 统计diff内容中的hunk数量
+function countHunks(diffContent) {
+  if (!diffContent) return 0;
+  const lines = diffContent.split('\n');
+  let hunkCount = 0;
+  for (const line of lines) {
+    if (line.startsWith('@@')) {
+      hunkCount++;
+    }
+  }
+  return hunkCount;
+}
+
 async function performDiff() {
   console.log(`\n[步骤2] 开始对formatter目录进行diff`);
   
@@ -324,6 +337,7 @@ async function performDiff() {
   let sameCount = 0;
   let diffCount = 0;
   let missingOnly = 0;
+  let totalHunks = 0;
   const onlyInDir2 = [];
   const onlyInDir1 = [];
   
@@ -371,11 +385,17 @@ async function performDiff() {
       continue;
     }
     
-    fs.writeFileSync(outPath, res.stdout || res.stderr || '', 'utf8');
+    const diffContent = res.stdout || res.stderr || '';
+    fs.writeFileSync(outPath, diffContent, 'utf8');
     diffCount += 1;
+    
+    // 统计hunk数量
+    const hunkCount = countHunks(diffContent);
+    totalHunks += hunkCount;
   }
   
-  console.log(`Diff完成。相同: ${sameCount}, 差异: ${diffCount}, 仅单侧存在: ${missingOnly}`);
+  console.log(`Diff完成。文件统计: 相同 ${sameCount}, 差异 ${diffCount}, 仅单侧存在 ${missingOnly}, 总计 ${set.size}`);
+  console.log(`Hunk统计: 总hunk数 ${totalHunks}`);
   console.log(`Diff 输出目录: ${outDir}`);
   
   // 输出缺失文件列表为 Markdown
@@ -500,12 +520,16 @@ function processDiffFile(filePath) {
   if (lines[idx]?.startsWith('+++')) out.push(lines[idx++]);
   
   let changed = false;
+  let deletedHunks = 0;
+  let totalHunks = 0;
+  
   while (idx < lines.length) {
     if (!lines[idx].startsWith('@@')) {
       idx++;
       continue;
     }
     const hunkHeader = lines[idx++];
+    totalHunks++;
     const hunkLines = [];
     while (idx < lines.length && !lines[idx].startsWith('@@')) {
       hunkLines.push(lines[idx]);
@@ -513,6 +537,7 @@ function processDiffFile(filePath) {
     }
     if (isTrivialHunk(hunkLines, hunkHeader)) {
       changed = true; // 丢弃该 hunk
+      deletedHunks++;
       continue;
     }
     out.push(hunkHeader);
@@ -522,14 +547,14 @@ function processDiffFile(filePath) {
   // 如果全部被丢弃，删除文件
   if (out.length === 0) {
     fs.unlinkSync(filePath);
-    return { deleted: true, changed };
+    return { deleted: true, changed, deletedHunks, totalHunks };
   }
   
   if (changed) {
     fs.writeFileSync(filePath, out.join('\n'), 'utf8');
-    return { deleted: false, changed: true };
+    return { deleted: false, changed: true, deletedHunks, totalHunks };
   }
-  return { deleted: false, changed: false };
+  return { deleted: false, changed: false, deletedHunks: 0, totalHunks };
 }
 
 function cleanDiffNoise() {
@@ -538,15 +563,27 @@ function cleanDiffNoise() {
   const files = fs.readdirSync(outDir).filter(f => f.endsWith('.diff'));
   let deleted = 0;
   let modified = 0;
+  let totalDeletedHunks = 0;
+  let totalHunksBefore = 0;
   
   for (const f of files) {
     const fp = path.join(outDir, f);
     const res = processDiffFile(fp);
-    if (res.deleted) deleted++;
-    else if (res.changed) modified++;
+    if (res.deleted) {
+      deleted++;
+      totalDeletedHunks += res.totalHunks; // 删除的文件中所有hunk都被删除了
+      totalHunksBefore += res.totalHunks;
+    } else if (res.changed) {
+      modified++;
+      totalDeletedHunks += res.deletedHunks;
+      totalHunksBefore += res.totalHunks;
+    } else {
+      totalHunksBefore += res.totalHunks;
+    }
   }
   
   console.log(`清理完成，修改 ${modified} 个 diff，删除 ${deleted} 个 diff。`);
+  console.log(`Hunk统计: 清理前总hunk数 ${totalHunksBefore}，删除 ${totalDeletedHunks} 个hunk，保留 ${totalHunksBefore - totalDeletedHunks} 个hunk`);
 }
 
 // ==================== 主函数 ====================
