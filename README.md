@@ -1,43 +1,50 @@
-# Trust Wallet 安全事件分析工具集
+# Trust Wallet 安全审计工具集
 
-> **安全事件说明**：已识别出影响 Trust Wallet Browser Extension **版本 2.68** 的安全事件。本工具集用于分析该版本与安全版本（2.67）之间的差异，识别潜在的后门、数据泄露和恶意行为。
+针对 Trust Wallet 浏览器扩展 v2.68 供应链攻击事件的分析工具。
 
-用于分析 Trust Wallet Chrome 扩展安全事件的工具集，包含代码差异对比、Burp Suite 数据解析和安全规则检测等功能。
+## 背景
 
-## 📁 项目结构
+2025 年 12 月 26 日，Trust Wallet 浏览器扩展 v2.68 被确认存在后门，导致用户资金被盗。本项目提供差异分析、后门检测和流量分析工具，用于定位恶意代码。
 
+## 工具
+
+| 工具 | 说明 | 用法 |
+|------|------|------|
+| `scripts/process_diff.js` | 代码差异分析（反混淆+降噪） | `npm run diff` |
+| `config/audit_backdoor.yaml` | Semgrep 后门检测规则 | `semgrep --config config/audit_backdoor.yaml <目录>` |
+| `tools/bp_decoder/` | Burp 流量解码器 | `npm run decoder` |
+
+## 快速开始
+
+```bash
+# 安装依赖
+npm install
+
+# 对两个版本进行差异分析
+npm run diff -- --dir1 <安全版本> --dir2 <可疑版本>
+
+# 使用 Semgrep 扫描
+semgrep --config config/audit_backdoor.yaml <目标目录>
+
+# 解析 Burp 流量
+python3 tools/bp_decoder/burp_decoder.py --input <文件> --output decoded.jsonl
 ```
-trust-wallet/
-├── README.md                 # 项目说明文档
-├── package.json              # Node.js 依赖配置
-├── .gitignore               # Git 忽略规则
-│
-├── scripts/                  # 工具脚本
-│   └── process_diff.js      # 代码差异对比脚本
-│
-├── tools/                    # 工具目录
-│   └── bp_decoder/          # Burp Suite 解码器 (Git Submodule)
-│       ├── burp_decoder.py  # Python 解码脚本
-│       └── README.md        # 解码器使用说明
-│
-├── config/                   # 配置文件
-│   └── audit_backdoor.yaml  # Semgrep 安全检测规则
-│
-└── data/                     # 数据目录
-    ├── extensions/          # Chrome 扩展版本（输入）
-    ├── formatter/           # 格式化后的代码（输出）
-    └── diff/                # 差异对比结果（输出）
-```
 
-## ⚠️ 安全事件概述
-On December 25, 2025, Trust Wallet experienced a security breach in its browser extension v2.68.0. The exploit involved a backdoor method that resulted in the theft of approximately $7M in user funds.
+## 关键发现
 
-**受影响版本**：Trust Wallet Browser Extension **2.68**  
-**安全版本**：2.67（作为对比基准）
+| 项目 | 内容 |
+|------|------|
+| 恶意域名 | `api.metrics-trustwallet.com` |
+| 触发点 | 解锁钱包时（`event: "Unlock"`） |
+| 异常载荷 | 请求体中异常插入 `errorMessage` 字段 |
+| 可疑代码 | `yield G.YW.emit()` |
 
-## Analysis
+## 分析方法
 
-TBA
+1. **静态分析**：元数据比对 → 反混淆降噪 diff → 大模型初筛
+2. **动态分析**：流量差异对比 → 运行时断点调试
+
+详细分析见 [analysis/Vulnerability location analysis.md](analysis/Vulnerability%20location%20analysis.md)
 
 ## References
 - [Root cause](https://x.com/0xakinator/status/2004297673067704651)
