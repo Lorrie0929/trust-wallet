@@ -1,7 +1,7 @@
 // 合并脚本：反混淆 -> 美化 -> diff -> 清理噪音
 // 工作流：
 // 1. 反混淆：使用 terser 格式化混淆后的代码
-// 2. 美化：使用 js-beautify 进一步美化代码，输出到xxx_formatter文件夹下
+// 2. 美化：使用 js-beautify 进一步美化代码, 输出到xxx_formatter文件夹下
 // 3. 对两个formatter文件夹下的文件进行diff
 // 4. 清理diff中的噪音
 //
@@ -28,6 +28,8 @@ function showHelp() {
 选项:
   --dir1 <目录>    第一个要比较的目录
   --dir2 <目录>    第二个要比较的目录
+  --ratio <阈值>   相似度阈值（0~1, 默认 0.7）
+  --strict        严格模式（规则1.5不归一化参数名）
   --help, -h       显示此帮助信息
 
 示例:
@@ -35,7 +37,7 @@ function showHelp() {
   node process_diff.js folder1 folder2
   
   # 使用命名参数
-  node process_diff.js --dir1 folder1 --dir2 folder2
+  node process_diff.js --dir1 folder1 --dir2 folder2 --ratio 0.8 --strict
   
   # 使用绝对路径
   node process_diff.js /path/to/folder1 /path/to/folder2
@@ -44,7 +46,7 @@ function showHelp() {
   node process_diff.js
 
 说明:
-  - 如果目录路径是相对路径，将相对于脚本所在目录解析
+  - 如果目录路径是相对路径, 将相对于脚本所在目录解析
   - 工作流程: 反混淆 -> 美化 -> diff -> 清理噪音
   - 脚本会创建 formatter 目录和 diff 输出目录
   - formatter 目录命名格式: <目录名>_formatter
@@ -62,6 +64,23 @@ function parseArgs() {
     process.exit(0);
   }
   
+  // 解析相似度阈值
+  let ratio = 0.7;
+  if (args.includes('--ratio')) {
+    const ratioIndex = args.indexOf('--ratio');
+    const rawRatio = args[ratioIndex + 1];
+    const parsed = Number(rawRatio);
+    if (!Number.isFinite(parsed) || parsed < 0 || parsed > 1) {
+      console.error('错误: --ratio 需要是 0~1 之间的数字');
+      console.error('使用 --help 查看帮助信息');
+      process.exit(1);
+    }
+    ratio = parsed;
+  }
+  
+  // 严格模式开关（规则1.5不归一化参数名）
+  const strictMode = args.includes('--strict');
+  
   // 如果使用 --dir1 和 --dir2 格式
   if (args.includes('--dir1') && args.includes('--dir2')) {
     const dir1Index = args.indexOf('--dir1');
@@ -78,6 +97,8 @@ function parseArgs() {
     return {
       dir1: path.isAbsolute(dir1) ? dir1 : path.resolve(__dirname, dir1),
       dir2: path.isAbsolute(dir2) ? dir2 : path.resolve(__dirname, dir2),
+      ratio,
+      strictMode,
     };
   }
   
@@ -86,6 +107,8 @@ function parseArgs() {
     return {
       dir1: path.isAbsolute(args[0]) ? args[0] : path.resolve(__dirname, args[0]),
       dir2: path.isAbsolute(args[1]) ? args[1] : path.resolve(__dirname, args[1]),
+      ratio,
+      strictMode,
     };
   }
   
@@ -93,11 +116,13 @@ function parseArgs() {
   return {
     dir1: path.join(__dirname, '..', 'data', 'extensions', 'egjidjbpglichdcondbcbdnbeeppgdph_2.67'),
     dir2: path.join(__dirname, '..', 'data', 'extensions', 'egjidjbpglichdcondbcbdnbeeppgdph_2.68'),
+    ratio,
+    strictMode,
   };
 }
 
 // 解析参数并设置配置
-const { dir1, dir2 } = parseArgs();
+const { dir1, dir2, ratio: similarityThreshold, strictMode } = parseArgs();
 const dir1Name = path.basename(dir1);
 const dir2Name = path.basename(dir2);
 
@@ -220,25 +245,25 @@ async function deobfuscateFile(code, filePath = '') {
     // 先尝试标准模式
     let result = await minify(code, terserDeobfuscateOptionsStandard);
     
-    // 如果标准模式失败，尝试宽松模式
+    // 如果标准模式失败, 尝试宽松模式
     if (result.error) {
       result = await minify(code, terserDeobfuscateOptionsLoose);
     }
     
     if (result.error) {
-      // 如果反混淆失败，静默返回原代码（不输出警告，因为很多文件可能无法反混淆）
+      // 如果反混淆失败, 静默返回原代码（不输出警告, 因为很多文件可能无法反混淆）
       return code;
     }
     
     if (result.code) {
       return result.code;
     } else {
-      // 没有输出代码，返回原代码
+      // 没有输出代码, 返回原代码
       return code;
     }
   } catch (error) {
-    // 如果出错，静默返回原代码
-    // 常见的错误如 "Unterminated string constant" 等，直接使用原代码即可
+    // 如果出错, 静默返回原代码
+    // 常见的错误如 "Unterminated string constant" 等, 直接使用原代码即可
     return code;
   }
 }
@@ -257,7 +282,7 @@ async function beautifyFile(srcPath, destPath, onDeobfuscateFailed = null) {
     const originalCode = code;
     let deobfuscatedCode = await deobfuscateFile(code, srcPath);
     
-    // 检查是否反混淆成功（如果返回的代码和原代码相同，说明反混淆失败）
+    // 检查是否反混淆成功（如果返回的代码和原代码相同, 说明反混淆失败）
     const deobfuscateFailed = deobfuscatedCode === originalCode;
     if (deobfuscateFailed && onDeobfuscateFailed) {
       onDeobfuscateFailed(true);
@@ -320,7 +345,7 @@ async function beautifyDirectory(srcDir, destDir) {
   
   const jsFiles = collectJsFiles(srcDir);
   const manifestFiles = collectManifestFiles(srcDir);
-  console.log(`找到 ${jsFiles.length} 个 JavaScript 文件，${manifestFiles.length} 个 manifest.json 文件`);
+  console.log(`找到 ${jsFiles.length} 个 JavaScript 文件, ${manifestFiles.length} 个 manifest.json 文件`);
   
   let successCount = 0;
   let failCount = 0;
@@ -456,13 +481,9 @@ async function performDiff() {
     fs.writeFileSync(outPath, diffContent, 'utf8');
     diffCount += 1;
     
-    // 统计hunk数量
-    const hunkCount = countHunks(diffContent);
-    totalHunks += hunkCount;
   }
   
   console.log(`Diff完成。文件统计: 相同 ${sameCount}, 差异 ${diffCount}, 仅单侧存在 ${missingOnly}, 总计 ${set.size}`);
-  console.log(`Hunk统计: 总hunk数 ${totalHunks}, 平均每个差异文件 ${diffCount > 0 ? (totalHunks / diffCount).toFixed(2) : 0} 个hunk`);
   console.log(`Diff 输出目录: ${outDir}`);
   
   // 输出缺失文件列表为 Markdown
@@ -488,12 +509,14 @@ async function performDiff() {
 
 // ==================== 步骤3: 清理diff噪音 ====================
 
-// 归一化：去掉行首 diff 标识，标识符替换为 X，压缩空白
-// 注意：保留函数参数列表完全不变，因为参数变化（数量、名称）可能是重要的差异
+// 归一化：去掉行首 diff 标识, 标识符替换为 X, 压缩空白
+// 注意：只归一化 module id 的数字；参数列表只保留数字，其他标识符归一化
 function normalizeLine(line) {
-  const body = line.replace(/^[-+ ]/, '');
+  let body = line.replace(/^[-+ ]/, '');
+  // 仅归一化模块 id（如: "  18109: (m, p, t) => {")
+  body = body.replace(/^(\s*)\d+:/, '$1X:');
   
-  // 先提取并保护函数参数列表（完全保留，不归一化）
+  // 先提取并保护函数参数列表（参数只保留数字，其他标识符归一化）
   const paramPatterns = [];
   let paramIndex = 0;
   
@@ -508,9 +531,12 @@ function normalizeLine(line) {
   let protectedBody = body;
   for (const pattern of functionPatterns) {
     protectedBody = protectedBody.replace(pattern, (match, params) => {
-      // 保护参数列表，完全保留原样
+      // 参数列表归一化：保留数字，其它标识符统一替换为 X
       const placeholder = `__PARAM_${paramIndex}__`;
-      paramPatterns.push({ placeholder, params: params.trim() });
+      const normalizedParams = params
+        .trim()
+        .replace(/\b[a-zA-Z_$][\w$]*\b/g, 'X');
+      paramPatterns.push({ placeholder, params: normalizedParams });
       paramIndex++;
       return match.replace(params, placeholder);
     });
@@ -518,18 +544,55 @@ function normalizeLine(line) {
   
   // 替换所有标识符为 X（但跳过参数占位符）
   let normalized = protectedBody.replace(/\b[a-zA-Z_$][\w$]*\b/g, (match) => {
-    // 如果是参数占位符，跳过
+    // 如果是参数占位符, 跳过
     if (match.startsWith('__PARAM_') && match.endsWith('__')) {
       return match;
     }
     return 'X';
   });
   
-  // 恢复参数列表，完全保留原样（不归一化）
+  // 恢复参数列表（已归一化）
   for (const { placeholder, params } of paramPatterns) {
     normalized = normalized.replace(placeholder, params);
   }
   
+  return normalized
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function normalizeLineForRename(line, { normalizeParams = true } = {}) {
+  let body = line.replace(/^[-+ ]/, '');
+  body = body.replace(/^(\s*)\d+:/, '$1X:');
+  const paramPatterns = [];
+  let paramIndex = 0;
+  const functionPatterns = [
+    /function\s+\w*\s*\(([^)]*)\)/g,
+    /\(([^)]*)\)\s*=>/g,
+    /\w+\s*\(([^)]*)\)\s*=>/g,
+    /=\s*function\s*\(([^)]*)\)/g,
+  ];
+  let protectedBody = body;
+  for (const pattern of functionPatterns) {
+    protectedBody = protectedBody.replace(pattern, (match, params) => {
+      const placeholder = `__PARAM_${paramIndex}__`;
+      const normalizedParams = normalizeParams
+        ? params.trim().replace(/[$A-Za-z_][0-9A-Za-z_$]*/g, 'X')
+        : params.trim();
+      paramPatterns.push({ placeholder, params: normalizedParams });
+      paramIndex++;
+      return match.replace(params, placeholder);
+    });
+  }
+  let normalized = protectedBody.replace(/[$A-Za-z_][0-9A-Za-z_$]*/g, (match) => {
+    if (match.startsWith('__PARAM_') && match.endsWith('__')) {
+      return match;
+    }
+    return 'X';
+  });
+  for (const { placeholder, params } of paramPatterns) {
+    normalized = normalized.replace(placeholder, params);
+  }
   return normalized
     .replace(/\s+/g, ' ')
     .trim();
@@ -559,6 +622,11 @@ function isTrivialHunk(lines, hunkHeader) {
   }
   if (removed.length === 0 || added.length === 0) return false;
   
+  // 规则0：新增行数明显多于删除行数, 认为是新增逻辑, 不做降噪
+  if (added.length - removed.length >= 3 && added.length >= Math.ceil(removed.length * 1.25)) {
+    return false;
+  }
+  
   const normRemovedArr = removed.map(normalizeLine);
   const normAddedArr = added.map(normalizeLine);
   
@@ -567,9 +635,23 @@ function isTrivialHunk(lines, hunkHeader) {
     return true;
   }
   
-  // 规则2：相似度阈值（重复率 > 70%），可用于忽略行号变化的平移/微调
+  // 规则1.5：行数相同且仅标识符/调用名变化
+  if (removed.length === added.length) {
+    const renameRemoved = removed.map((line) =>
+      normalizeLineForRename(line, { normalizeParams: !strictMode })
+    );
+    const renameAdded = added.map((line) =>
+      normalizeLineForRename(line, { normalizeParams: !strictMode })
+    );
+    const renameRatio = similarityRatio(renameRemoved, renameAdded);
+    if (renameRatio >= 0.8) {
+      return true;
+    }
+  }
+  
+  // 规则2：相似度阈值（重复率 >= 阈值）, 可用于忽略行号变化的平移/微调
   const ratio = similarityRatio(normRemovedArr, normAddedArr);
-  if (ratio >= 0.7) {
+  if (ratio >= similarityThreshold) {
     return true;
   }
   
@@ -587,8 +669,8 @@ function processDiffFile(filePath) {
   if (lines[idx]?.startsWith('+++')) out.push(lines[idx++]);
   
   let changed = false;
-  let deletedHunks = 0;
-  let totalHunks = 0;
+  let deletedBlocks = 0;
+  let totalBlocks = 0;
   
   while (idx < lines.length) {
     if (!lines[idx].startsWith('@@')) {
@@ -596,32 +678,63 @@ function processDiffFile(filePath) {
       continue;
     }
     const hunkHeader = lines[idx++];
-    totalHunks++;
     const hunkLines = [];
     while (idx < lines.length && !lines[idx].startsWith('@@')) {
       hunkLines.push(lines[idx]);
       idx++;
     }
-    if (isTrivialHunk(hunkLines, hunkHeader)) {
+    
+    // 按变更块（连续的 +/- 行）细分 hunk
+    const keptHunkLines = [];
+    let pendingBlock = [];
+    let blockIndex = 0;
+    let hasChange = false;
+    
+    const flushBlock = () => {
+      if (pendingBlock.length === 0) return;
+      blockIndex += 1;
+      totalBlocks += 1;
+      if (isTrivialHunk(pendingBlock, hunkHeader)) {
+        changed = true;
+        deletedBlocks += 1;
+      } else {
+        hasChange = true;
+        keptHunkLines.push(...pendingBlock);
+      }
+      pendingBlock = [];
+    };
+    
+    for (const line of hunkLines) {
+      const isChangeLine = line.startsWith('-') || line.startsWith('+');
+      const isNoNewlineLine = line.startsWith('\\');
+      if (isChangeLine || (isNoNewlineLine && pendingBlock.length > 0)) {
+        pendingBlock.push(line);
+        continue;
+      }
+      flushBlock();
+      keptHunkLines.push(line);
+    }
+    flushBlock();
+    
+    if (!hasChange) {
       changed = true; // 丢弃该 hunk
-      deletedHunks++;
       continue;
     }
     out.push(hunkHeader);
-    for (const line of hunkLines) out.push(line);
+    for (const line of keptHunkLines) out.push(line);
   }
   
-  // 如果全部被丢弃，删除文件
+  // 如果全部被丢弃, 删除文件
   if (out.length === 0) {
     fs.unlinkSync(filePath);
-    return { deleted: true, changed, deletedHunks, totalHunks };
+    return { deleted: true, changed, deletedBlocks, totalBlocks };
   }
   
   if (changed) {
     fs.writeFileSync(filePath, out.join('\n'), 'utf8');
-    return { deleted: false, changed: true, deletedHunks, totalHunks };
+    return { deleted: false, changed: true, deletedBlocks, totalBlocks };
   }
-  return { deleted: false, changed: false, deletedHunks: 0, totalHunks };
+  return { deleted: false, changed: false, deletedBlocks, totalBlocks };
 }
 
 function cleanDiffNoise() {
@@ -630,27 +743,29 @@ function cleanDiffNoise() {
   const files = fs.readdirSync(outDir).filter(f => f.endsWith('.diff'));
   let deleted = 0;
   let modified = 0;
-  let totalDeletedHunks = 0;
-  let totalHunksBefore = 0;
+  let totalDeletedBlocks = 0;
+  let totalBlocksBefore = 0;
   
   for (const f of files) {
     const fp = path.join(outDir, f);
     const res = processDiffFile(fp);
     if (res.deleted) {
       deleted++;
-      totalDeletedHunks += res.totalHunks; // 删除的文件中所有hunk都被删除了
-      totalHunksBefore += res.totalHunks;
+      totalDeletedBlocks += res.totalBlocks;
+      totalBlocksBefore += res.totalBlocks;
     } else if (res.changed) {
       modified++;
-      totalDeletedHunks += res.deletedHunks;
-      totalHunksBefore += res.totalHunks;
+      totalDeletedBlocks += res.deletedBlocks;
+      totalBlocksBefore += res.totalBlocks;
     } else {
-      totalHunksBefore += res.totalHunks;
+      totalBlocksBefore += res.totalBlocks;
     }
   }
   
-  console.log(`清理完成，修改 ${modified} 个 diff，删除 ${deleted} 个 diff。`);
-  console.log(`Hunk统计: 清理前总hunk数 ${totalHunksBefore}，删除 ${totalDeletedHunks} 个hunk，保留 ${totalHunksBefore - totalDeletedHunks} 个hunk`);
+  // console.log(`清理完成, 修改 ${modified} 个 diff, 删除 ${deleted} 个 diff。`);
+  const keptBlocks = totalBlocksBefore - totalDeletedBlocks;
+  const keptRatio = totalBlocksBefore > 0 ? (keptBlocks / totalBlocksBefore) * 100 : 0;
+  console.log(`Block统计: 清理前总block数 ${totalBlocksBefore}, 删除 ${totalDeletedBlocks} 个block, 保留 ${keptBlocks} 个block（${keptRatio.toFixed(2)}%）`);
 }
 
 // ==================== 主函数 ====================
@@ -662,7 +777,9 @@ async function main() {
   console.log(`配置信息:`);
   console.log(`  目录1: ${dir1}`);
   console.log(`  目录2: ${dir2}`);
-  console.log(`  输出目录: ${outDir}\n`);
+  console.log(`  输出目录: ${outDir}`);
+  console.log(`  相似度阈值: ${similarityThreshold}`);
+  console.log(`  严格模式: ${strictMode}\n`);
   
   // 验证目录是否存在
   if (!fs.existsSync(dir1)) {
@@ -676,8 +793,17 @@ async function main() {
   
   try {
     // 步骤1: 美化文件并输出到formatter目录
-    await beautifyDirectory(dir1, dir1Formatter);
-    await beautifyDirectory(dir2, dir2Formatter);
+    const hasFormatter = (p) => fs.existsSync(p) && fs.readdirSync(p).length > 0;
+    if (hasFormatter(dir1Formatter)) {
+      console.log(`[步骤1] 已存在formatter目录, 跳过: ${dir1Formatter}`);
+    } else {
+      await beautifyDirectory(dir1, dir1Formatter);
+    }
+    if (hasFormatter(dir2Formatter)) {
+      console.log(`[步骤1] 已存在formatter目录, 跳过: ${dir2Formatter}`);
+    } else {
+      await beautifyDirectory(dir2, dir2Formatter);
+    }
     
     // 步骤2: 对formatter目录进行diff
     await performDiff();
